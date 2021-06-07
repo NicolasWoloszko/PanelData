@@ -2,6 +2,7 @@
 
 import pandas as pd
 from sklearn.decomposition import PCA
+from sklearn.base import BaseEstimator, TransformerMixin
 
 class FixedEffects(BaseEstimator, TransformerMixin):
     def __init__(self, level = 0, prefix = "Country"):
