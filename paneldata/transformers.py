@@ -55,7 +55,7 @@ class ScalerDF(BaseEstimator, TransformerMixin):
     """
     Applies scaling with scikit learn scaler to pandas data frame while conserving columns and index.
     """
-    def __init__ (self, scaler = StandardScaler(), verbose=0):
+    def __init__ (self, scaler = QuantileTransformer(output_distribution="normal"), verbose=0):
         self.scaler = scaler
         self.verbose = verbose
 
@@ -63,7 +63,7 @@ class ScalerDF(BaseEstimator, TransformerMixin):
         if self.verbose>0:
             print ("Fitting ScalerDF")
         self.scaler.fit(X)
-        return(self)
+        return self
 
     def transform(self, X, y =None):
         X_ = self.scaler.transform(X)
@@ -78,7 +78,7 @@ class ScalerDF(BaseEstimator, TransformerMixin):
             
     def inverse_transform(self, X, copy=None):
         X_ = self.scaler.inverse_transform(X)
-        return(pd.DataFrame(X_, columns = X.columns, index = X.index))
+        return pd.DataFrame(X_, columns = X.columns, index = X.index)
 
 
 class CountryTransformer(TransformerMixin, BaseEstimator):
@@ -99,3 +99,60 @@ class CountryTransformer(TransformerMixin, BaseEstimator):
         transformed = pd.concat(transformed_country, keys = self.countries)
         transformed.index.names = X.index.names
         return(transformed)
+
+
+
+
+class FirstDifference(BaseEstimator, TransformerMixin):
+    def __init__(self, keep_both=True):
+        self.keep_both = keep_both
+        
+    
+    def fit(self, X, y=None):
+        return self
+        
+    def transform(self, X, y=None):
+        X_gr=X.apply(FirstDifference.first_diff_)
+        X_gr.columns=[col+", growth rate" for col in X_gr.columns]
+        if self.keep_both:
+            _X=pd.concat([X_gr, X], axis=1)
+            return _X
+        else:
+            return X_gr
+    
+    @staticmethod
+    def first_diff_(x):
+        x_g=x - x.shift(1)
+        return(x_g)
+
+class MakeStationary(BaseEstimator, TransformerMixin):
+    def __init__(self, threshold=0.05):
+        self.threshold=threshold
+        
+    def fit(self, X, y=None):
+        self.stationary=X.apply(lambda ser : MakeStationary._is_stationary(self.threshold, ser))
+        #print self.stationary
+        return self
+        
+    def transform(self, X, y=None):
+        X_stationary=X.loc[:,self.stationary]
+        
+        X_nonstat=X.loc[:,~self.stationary]
+        X_nonstat=X_nonstat.apply(MakeStationary.growth_rate_)
+        X_nonstat.columns=[col+", growth rate" for col in X_nonstat.columns]
+        _X=pd.concat([X_stationary, X_nonstat], axis=1)
+
+        return _X
+
+    @staticmethod
+    def _is_stationary(threshold, ser):
+        try:
+            return adfuller(ser.dropna())[1]<=threshold
+        except ZeroDivisionError:
+            return False
+    
+    @staticmethod
+    def growth_rate_(x):
+        x_lag=x.shift(1).replace({0:0.01})#to avoid dividing by zero
+        x_g=x.divide(x_lag)-1.0
+        return(x_g)
