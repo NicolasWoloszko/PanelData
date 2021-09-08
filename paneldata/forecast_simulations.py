@@ -66,11 +66,12 @@ def cross_val_predict(estimator, X, y=None, groups=None, cv='warn',
 
 class PanelForwardLookingCrossVal(_BaseKFold):
 
-    def __init__(self, n_splits=10, index_year=1, verbose = 0):
+    def __init__(self, n_splits=10, months_y_release_delay = 2, index_year=1, verbose = 0):
 
         self.n_splits=n_splits
         self.index_year=index_year
         self.verbose = verbose
+        self.months_y_release_delay = months_y_release_delay
 
     def split(self, X, y=None, groups=None):
         
@@ -87,21 +88,23 @@ class PanelForwardLookingCrossVal(_BaseKFold):
                 if self.verbose>0:
                     print(year)
                 if y.ndim ==1:    
-                    train_indexes=np.where((X.index.get_level_values(self.index_year)<year) & (~np.isnan(y)))
+                    train_indexes=np.where((X.index.get_level_values(self.index_year) <= year - pd.DateOffset(months = self.months_y_release_delay)) & 
+                        (~np.isnan(y)))
 
-                    ### Release delays in monthly series for GBR and CAN
-                    ## UK
-                    remove = np.where((X.index.get_level_values(self.index_year)<year) & (~np.isnan(y)) & (X.index.get_level_values(0) == "United Kingdom")) 
-                    remove = remove[0][-2:]
-                    train_indexes = np.setdiff1d(train_indexes,remove)
+                    # ### Release delays in monthly series for GBR and CAN
+                    # ## UK
+                    # remove = np.where((X.index.get_level_values(self.index_year)<year) & (~np.isnan(y)) & (X.index.get_level_values(0) == "United Kingdom")) 
+                    # remove = remove[0][-2:]
+                    # train_indexes = np.setdiff1d(train_indexes,remove)
 
-                    ## Canada
-                    remove = np.where((X.index.get_level_values(self.index_year)<year) & (~np.isnan(y)) & (X.index.get_level_values(0) == "Canada")) 
-                    remove = remove[0][-3:]
-                    train_indexes = np.setdiff1d(train_indexes,remove)
+                    # ## Canada
+                    # remove = np.where((X.index.get_level_values(self.index_year)<year) & (~np.isnan(y)) & (X.index.get_level_values(0) == "Canada")) 
+                    # remove = remove[0][-3:]
+                    # train_indexes = np.setdiff1d(train_indexes,remove)
 
                 elif y.ndim>1:
-                    train_indexes=np.where((X.index.get_level_values(self.index_year)<year) & (~np.isnan(y).any(axis = 1)))
+                    train_indexes=np.where((X.index.get_level_values(self.index_year) <= year - pd.DateOffset(months = self.months_y_release_delay)) & 
+                        (~np.isnan(y).any(axis = 1)))
                 
                 # if i<len(years)-1:
                 #     test_indexes=np.where((X.index.get_level_values(self.index_year)<=year) & (X.index.get_level_values(self.index_year)>years[i-1]))
@@ -118,17 +121,19 @@ class PanelForwardLookingCrossVal(_BaseKFold):
 
 class PanelForwardLookingCrossVal2(_BaseKFold):
 
-    def __init__(self, n_splits=10, index_year=1, verbose = 0):
+    def __init__(self, n_splits=10, index_year=1, verbose = 0, quarterly = True):
 
         self.n_splits=n_splits
         self.index_year=index_year
         self.verbose = verbose
+        self.quarterly = quarterly
 
     def split(self, X, y=None, groups=None):
         
         y_full = y.dropna()
         years=sorted(set(y_full.index.get_level_values(self.index_year)))
-        years = [year for year in years if year.month in [1, 4, 7, 10]]
+        if self.quarterly:
+            years = [year for year in years if year.month in [1, 4, 7, 10]]
         assert self.n_splits<len(set(years)), "n_splits must be less than number of years"
         
         n_samples=len(X)
